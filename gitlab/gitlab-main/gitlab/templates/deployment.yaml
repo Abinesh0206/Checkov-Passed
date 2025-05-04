@@ -81,6 +81,11 @@ spec:
                 secretKeyRef:
                   name: smtp-secret
                   key: password
+            - name: GITLAB_SECRETS_DB_KEY_BASE
+              valueFrom:
+                secretKeyRef:
+                  name: gitlab-secret
+                  key: secret_key_base
             - name: GITLAB_OMNIBUS_CONFIG
               value: |
                 external_url 'http://{{ (index .Values.ingress.hosts 0).host }}';
