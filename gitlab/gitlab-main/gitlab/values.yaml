@@ -37,10 +37,10 @@ externalPostgresql:
 resources:
   requests:
     memory: "4Gi"
-    cpu: "2"
+    cpu: "1"
   limits:
     memory: "6Gi"
-    cpu: "4"
+    cpu: "3"
 
 backups:
   existingClaim: gitlab-backup-pvc
