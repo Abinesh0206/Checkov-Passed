@@ -1,52 +1,32 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: gitlab
-  namespace: rds-git
+  name: {{ .Release.Name }}-kibana
+  namespace: efk
   labels:
-    app: gitlab
+    app: kibana
+    {{- include "efk-stack.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+  replicas: {{ .Values.kibana.replicaCount }}
   selector:
     matchLabels:
-      app: gitlab
+      app: kibana
   template:
     metadata:
       labels:
-        app: gitlab
+        app: kibana
     spec:
-      serviceAccountName: prometheus-sa
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: {{ .Values.kibana.securityContext.fsGroup }}
       initContainers:
         - name: fix-permissions
           image: alpine:3.18
           imagePullPolicy: Always
-          command:
-            - /bin/sh
-            - -c
-            - |
-              chown -R 998:998 /var/opt/gitlab || echo "warn: chown fail"
-              chmod -R 755 /var/opt/gitlab || echo "warn: chmod fail"
-              chown -R 998:998 /var/opt/gitlab/git-data || echo "warn: chown git-data"
-              chmod -R 755 /var/opt/gitlab/git-data || echo "warn: chmod git-data"
-              chown -R 998:998 /var/opt/gitlab/backups || echo "warn: chown backups"
-              chmod -R 755 /var/opt/gitlab/backups || echo "warn: chmod backups"
-          securityContext:
-            runAsUser: 0
-            runAsGroup: 0
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
+          command: ["sh", "-c", "mkdir -p /mnt/data && chown -R 1000:1000 /mnt/data"]
           volumeMounts:
-            - mountPath: /var/opt/gitlab
-              name: gitlab-storage
-            - mountPath: /var/opt/gitlab/backups
-              name: gitlab-backup-volume
+            - name: kibana-data
+              mountPath: /mnt/data
           resources:
             requests:
               memory: "32Mi"
@@ -54,105 +34,59 @@ spec:
             limits:
               memory: "64Mi"
               cpu: "50m"
-
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
       containers:
-        - name: gitlab
-          image: "{{ .Values.image.repository }}{{- if .Values.image.tag }}:{{ .Values.image.tag }}{{- end }}"
-          imagePullPolicy: Always
-          env:
-            - name: POSTGRESQL_HOST
-              value: "{{ .Values.externalPostgresql.host }}"
-            - name: POSTGRESQL_USER
-              value: "{{ .Values.externalPostgresql.username }}"
-            - name: POSTGRESQL_DB
-              value: "{{ .Values.externalPostgresql.database }}"
-            - name: POSTGRESQL_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: gitlab-postgres-secret
-                  key: password
-            - name: SMTP_USER
-              valueFrom:
-                secretKeyRef:
-                  name: smtp-secret
-                  key: email
-            - name: SMTP_PASS
-              valueFrom:
-                secretKeyRef:
-                  name: smtp-secret
-                  key: password
-            - name: GITLAB_SECRETS_DB_KEY_BASE
-              valueFrom:
-                secretKeyRef:
-                  name: gitlab-secret
-                  key: secret_key_base
-            - name: GITLAB_OMNIBUS_CONFIG
-              value: |
-                external_url 'http://{{ (index .Values.ingress.hosts 0).host }}';
-                gitlab_rails['db_adapter'] = 'postgresql';
-                gitlab_rails['db_host'] = "$(POSTGRESQL_HOST)";
-                gitlab_rails['db_port'] = {{ .Values.externalPostgresql.port }};
-                gitlab_rails['db_database'] = "$(POSTGRESQL_DB)";
-                gitlab_rails['db_username'] = "$(POSTGRESQL_USER)";
-                gitlab_rails['db_password'] = "$(POSTGRESQL_PASSWORD)";
-                gitlab_rails['backup_path'] = "/var/opt/gitlab/backups";
-                nginx['listen_port'] = 80;
-
-                gitlab_rails['smtp_enable'] = true;
-                gitlab_rails['smtp_address'] = 'smtp.gmail.com';
-                gitlab_rails['smtp_port'] = 587;
-                gitlab_rails['smtp_user_name'] = "$(SMTP_USER)";
-                gitlab_rails['smtp_password'] = "$(SMTP_PASS)";
-                gitlab_rails['smtp_domain'] = 'smtp.gmail.com';
-                gitlab_rails['smtp_authentication'] = 'login';
-                gitlab_rails['smtp_enable_starttls_auto'] = true;
-                gitlab_rails['gitlab_email_from'] = "$(SMTP_USER)";
-                gitlab_rails['gitlab_email_reply_to'] = "$(SMTP_USER)";
+        - name: kibana
+          image: "{{ .Values.kibana.image.repository }}:{{ .Values.kibana.image.tag | default "8.13.4" }}"
+          imagePullPolicy: {{ .Values.kibana.image.pullPolicy }}
           ports:
-            - name: http
-              containerPort: 80
-              protocol: TCP
+            - containerPort: 5601
+          env:
+            - name: ELASTICSEARCH_HOSTS
+              value: "http://{{ .Release.Name }}-elasticsearch:9200"
           volumeMounts:
-            - mountPath: /var/opt/gitlab
-              name: gitlab-storage
-            - mountPath: /var/opt/gitlab/backups
-              name: gitlab-backup-volume
-            - mountPath: /etc/gitlab
-              name: gitlab-config
-            - mountPath: /etc/ssh
-              name: ssh-volume
+            - name: kibana-data
+              mountPath: /usr/share/kibana/data
           livenessProbe:
             httpGet:
-              path: /help
-              port: http
-            initialDelaySeconds: 300
-            periodSeconds: 30
+              path: /status
+              port: 5601
+            initialDelaySeconds: 120
+            periodSeconds: 15
             timeoutSeconds: 10
-            failureThreshold: 10
+            failureThreshold: 5
           readinessProbe:
             httpGet:
-              path: /help
-              port: http
-            initialDelaySeconds: 180
-            periodSeconds: 20
+              path: /status
+              port: 5601
+            initialDelaySeconds: 90
+            periodSeconds: 10
             timeoutSeconds: 10
-            failureThreshold: 10
+            failureThreshold: 5
           resources:
             requests:
-              memory: "{{ .Values.resources.requests.memory }}"
-              cpu: "{{ .Values.resources.requests.cpu }}"
+              cpu: "{{ .Values.kibana.resources.requests.cpu }}"
+              memory: "{{ .Values.kibana.resources.requests.memory }}"
             limits:
-              memory: "{{ .Values.resources.limits.memory }}"
-              cpu: "{{ .Values.resources.limits.cpu }}"
-
+              cpu: "{{ .Values.kibana.resources.limits.cpu }}"
+              memory: "{{ .Values.kibana.resources.limits.memory }}"
+          securityContext:
+            runAsUser: {{ .Values.kibana.securityContext.runAsUser }}
+            runAsGroup: {{ .Values.kibana.securityContext.fsGroup }}
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
       volumes:
-        - name: gitlab-storage
+        - name: kibana-data
           persistentVolumeClaim:
-            claimName: {{ .Values.persistence.existingClaim | default "gitlab-pvc" }}
-        - name: gitlab-backup-volume
-          persistentVolumeClaim:
-            claimName: {{ .Values.backups.existingClaim | default "gitlab-backup-pvc" }}
-        - name: gitlab-config
-          emptyDir: {}
-        - name: ssh-volume
-          emptyDir: {}
+            claimName: {{ .Release.Name }}-kibana-pvc
