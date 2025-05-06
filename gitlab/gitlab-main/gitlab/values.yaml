@@ -40,7 +40,7 @@ resources:
     cpu: "1"
   limits:
     memory: "4Gi"
-    cpu: "3"
+    cpu: "2"
 
 backups:
   existingClaim: gitlab-backup-pvc
