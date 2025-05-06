@@ -36,10 +36,10 @@ externalPostgresql:
 
 resources:
   requests:
-    memory: "4Gi"
+    memory: "2Gi"
     cpu: "1"
   limits:
-    memory: "8Gi"
+    memory: "4Gi"
     cpu: "3"
 
 backups:
