@@ -1,4 +1,11 @@
 {{/*
+Return the name of the chart
+*/}}
+{{- define "gitlab.name" -}}
+{{ .Chart.Name }}
+{{- end }}
+
+{{/*
 Generate common labels
 */}}
 {{- define "efk-stack.labels" -}}
