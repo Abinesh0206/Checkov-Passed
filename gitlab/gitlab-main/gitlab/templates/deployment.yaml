@@ -21,40 +21,6 @@ spec:
         app: gitlab
     spec:
       serviceAccountName: prometheus-sa
-      initContainers:
-        - name: fix-permissions
-          image: alpine:3.18
-          imagepullpolicy: Always
-          command:
-            - /bin/sh
-            - -c
-            - |
-              chown -R 998:998 /var/opt/gitlab || echo "warn: chown fail"
-              chmod -R 755 /var/opt/gitlab || echo "warn: chmod fail"
-              chown -R 998:998 /var/opt/gitlab/git-data || echo "warn: chown git-data"
-              chmod -R 755 /var/opt/gitlab/git-data || echo "warn: chmod git-data"
-              chown -R 998:998 /var/opt/gitlab/backups || echo "warn: chown backups"
-              chmod -R 755 /var/opt/gitlab/backups || echo "warn: chmod backups"
-          securityContext:
-            runAsUser: 0
-            runAsGroup: 0
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-          volumeMounts:
-            - mountPath: /var/opt/gitlab
-              name: gitlab-storage
-            - mountPath: /var/opt/gitlab/backups
-              name: gitlab-backup-volume
-          resources:
-            requests:
-              memory: "32Mi"
-              cpu: "10m"
-            limits:
-              memory: "64Mi"
-              cpu: "50m"
-
       containers:
         - name: gitlab
           image: "{{ .Values.image.repository }}{{- if .Values.image.tag }}:{{ .Values.image.tag }}{{- end }}"
@@ -110,7 +76,6 @@ spec:
                 gitlab_rails['db_database'] = "$(POSTGRES_DB)";
                 gitlab_rails['db_username'] = "$(POSTGRES_USER)";
                 gitlab_rails['db_password'] = "$(POSTGRES_PASSWORD)";
-                gitlab_rails['backup_path'] = "/var/opt/gitlab/backups";
                 nginx['listen_port'] = 80;
 
                 # SMTP settings
@@ -132,8 +97,6 @@ spec:
           volumeMounts:
             - mountPath: /var/opt/gitlab
               name: gitlab-storage
-            - mountPath: /var/opt/gitlab/backups
-              name: gitlab-backup-volume
             - mountPath: /etc/gitlab
               name: gitlab-config
             - mountPath: /etc/ssh
@@ -166,9 +129,6 @@ spec:
         - name: gitlab-storage
           persistentVolumeClaim:
             claimName: {{ .Values.persistence.existingClaim | default "gitlab-pvc" }}
-        - name: gitlab-backup-volume
-          persistentVolumeClaim:
-            claimName: {{ .Values.backups.existingClaim | default "gitlab-backup-pvc" }}
         - name: gitlab-config
           emptyDir: {}
         - name: ssh-volume
