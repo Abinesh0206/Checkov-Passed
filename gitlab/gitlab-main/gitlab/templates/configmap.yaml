@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: gitlab-config
-  namespace: rds-git
+  namespace: gitlab-ce
 data:
   gitlab.rb: |
     external_url 'http://{{ (index .Values.ingress.hosts 0).host }}'
