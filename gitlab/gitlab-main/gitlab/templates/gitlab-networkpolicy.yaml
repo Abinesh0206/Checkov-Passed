@@ -2,7 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: gitlab-network-policy
-  namespace: rds-git
+  namespace: gitlab-ce
 spec:
   podSelector:
     matchLabels:
