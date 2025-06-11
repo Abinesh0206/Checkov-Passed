@@ -125,14 +125,14 @@ monitoring:
   namespaceOverride: everest-monitoring
   fullnameOverride: vm-operator
   crds:
-    enabled: true
-    plain: true
+    enabled: false
+    plain: false
   admissionWebhooks:
     enabled: false
   certManager:
     enabled: false
   securityContext:
-    runAsNonRoot: true
+    runAsNonRoot: false
     allowPrivilegeEscalation: false
     privileged: false
   labels:
